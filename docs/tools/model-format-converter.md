@@ -28,7 +28,22 @@ Obsługiwane rozszerzenia wejścia i wyjścia to `.fbx`, `.gltf`, `.glb`, `.usd`
 `.usdz`, `.obj`, `.ply` i `.stl` (wielkość liter nie ma znaczenia). Skrypt dopuszcza
 każdą parę tych rozszerzeń, także tę samą na wejściu i wyjściu. Rzeczywista granica
 pary jest przecięciem tego, co importer Blendera odczytał ze źródła, i możliwości
-formatu docelowego:
+formatu docelowego.
+
+Ograniczenie po stronie wejścia jest nieodwracalne: konwerter nie odtwarza danych,
+których plik źródłowy nie potrafił zapisać albo których importer Blendera nie
+odczytał. Dlatego przed wybraniem celu ustal najpierw górną granicę danych wejścia:
+
+| Format wejściowy | Dane, które mogą wejść do konwersji | Ograniczenie odziedziczone przez każdą parę z tym wejściem |
+| --- | --- | --- |
+| FBX | Geometria, UV, materiały, tekstury, szkielet, skinning, shape keys i animacje | Semantyka shaderów, jednostek, osi, kości i klipów jest już interpretacją importera FBX Blendera. |
+| glTF / GLB | Geometria, UV, materiały glTF, tekstury, skiny, morph targets i animacje | Konwerter nie odzyska węzłów shaderów ani danych DCC spoza modelu glTF; zewnętrzne zasoby `.gltf` muszą być dostępne. |
+| USD / USDZ | Geometria, UV, materiały, tekstury, szkielety, deformacje i animacje obsłużone przez importer USD | Warstwy, warianty, instancje i shadery mogą zostać spłaszczone już podczas importu do sceny Blendera. |
+| OBJ | Statyczna geometria, UV oraz proste materiały i odwołania do tekstur z MTL | Żaden format wynikowy nie odzyska skeletonu, skinningu, morph targets ani animacji z OBJ. |
+| PLY | Statyczna geometria, UV i ewentualne atrybuty kolorów | Żaden format wynikowy nie odzyska materiałów, tekstur ani danych postaci z PLY. |
+| STL | Statyczna geometria | Żaden format wynikowy nie odzyska UV, materiałów, tekstur ani danych postaci z STL. |
+
+Następnie zastosuj ograniczenie formatu wyjściowego:
 
 | Format docelowy | Geometria / UV | Materiały / tekstury | Szkielet / skinning | Morph targets | Animacje | Najważniejsze ograniczenie tej pary |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -71,7 +86,7 @@ python scripts/model_format_converter.py INPUT OUTPUT
 | `--animations auto\|keep\|strip` | `auto` i `keep` zachowują eksport animacji; `strip` usuwa dane animacji i akcje przed eksportem. |
 | `--apply-transforms` | Stosuje obrót i skalę wszystkich obiektów przed eksportem; nie stosuje położenia. Używaj dopiero po sprawdzeniu riggu. |
 | `--report PATH` | Zastępuje domyślną ścieżkę raportu `<OUTPUT>.conversion.json`. |
-| `--blender PATH` | Jawna ścieżka do pliku wykonywalnego Blender. Ma pierwszeństwo przed `BLENDER_BIN` i `PATH`. |
+| `--blender PATH` | Nazwa lub ścieżka do pliku wykonywalnego Blender, sprawdzana jako pierwsza. Jeśli nie wskazuje istniejącego pliku, skrypt nadal próbuje `BLENDER_BIN`, `PATH` i — na Windows — znanych katalogów instalacyjnych. |
 | `--strict` | Przerywa przed eksportem, jeśli analiza wykryje stratę cechy lub jawne `strip`/`skip`. |
 
 Skrypt można również uruchomić bezpośrednio przez Blender; argumenty skryptu muszą
@@ -184,7 +199,8 @@ GLB i raport w `exports/review`.
 3. Sprawdź kod, oba pliki i raport:
 
     ```bash
-    test $? -eq 0
+    conversion_status=$?
+    test "$conversion_status" -eq 0
     test -f exports/review/avatar_v012.glb
     test -f exports/review/avatar_v012.glb.conversion.json
     python -m json.tool exports/review/avatar_v012.glb.conversion.json
