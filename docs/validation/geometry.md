@@ -1,30 +1,65 @@
 # Walidacja geometrii
 
-Walidujemy osobno high-poly scan, retopology master i eksport runtime. Progi zależą od etapu.
+Siatkę wysokiej rozdzielczości (high-poly mesh), wzorcową retopologię i eksport do środowiska czasu rzeczywistego sprawdza się oddzielnie, ponieważ mają inne przeznaczenie i progi. Kontrola odbywa się na kopii roboczej; raport wskazuje wersję źródła, jednostki, osie, liczbę wierzchołków/ścian/trójkątów, obwiednię, zestawy UV, materiały i klucze kształtu. Zmiana topologii po rozpoczęciu rigu jest migracją zależności, nie lokalną poprawką.
 
-## Retopology master
+## Jak interpretować typowe problemy
 
-Wymagania pass:
+- **Geometria niebędąca rozmaitością (non-manifold geometry)** ma krawędź należącą do innej liczby niż dwie ściany w zamkniętej powierzchni albo rozgałęzienie niemożliwe dla fizycznej powłoki. Selektor `Non-Manifold` ujawnia otwarte brzegi, wewnętrzne ściany i połączenia „T”. Zamierzony otwór szyi może być wyjątkiem, luźna ściana wewnątrz głowy — nie.
+- **Powierzchnia zerowa (zero-area face)** to ściana, której wierzchołki są współliniowe albo zlane, więc jej pole jest równe lub numerycznie bliskie zeru. Objawia się błędami triangulacji, wypalania i cieniowania; sama obecność trzech indeksów nie czyni jej poprawnym trójkątem.
+- **Odwrócona normalna (flipped normal)** wskazuje przeciwną stronę powierzchni niż sąsiednie ściany. W podglądzie orientacji ścian pojawia się kolor strony wewnętrznej, a przy usuwaniu tylnych ścian fragment znika. Nie naprawiaj automatycznie normalnych obiektów, które celowo mają dwie powłoki, bez sprawdzenia kierunku każdej z nich.
+- **Samoprzecięcie (self-intersection)** występuje, gdy niepowiązane fragmenty tej samej siatki przechodzą przez siebie. Może być niewidoczne w widoku bryłowym, ale powoduje błędy rekonstrukcji, wypalania i kolizji. Bliski kontakt warg nie jest przecięciem; trójkąty przecinające się objętościowo nim są.
+- **Skala** oznacza relację jednostki sceny i wymiaru obiektu do rzeczywistego wymiaru. Model o poprawnym wyglądzie, lecz stukrotnie za mały, daje błędne kolizje, kamery i import. Kontroluj zarówno liczbową obwiednię, jak i zastosowane transformacje.
+- **Nakładanie UV (UV overlap)** oznacza, że różne ściany zajmują ten sam obszar tekstury. Jest poprawne tylko dla jawnie współdzielonych, np. lustrzanych elementów; przypadkowe nałożenie przenosi detal i bake między niezależnymi miejscami.
+- **Margines między wyspami UV (UV padding)** to wolna przestrzeń oraz rozszerzenie koloru wokół wysp. Zbyt mały margines powoduje przeciekanie sąsiednich kolorów na niższych poziomach mipmap, a nadmierny marnuje powierzchnię atlasu. Minimum po wypaleniu to 8 px w docelowej teksturze 4K, preferowane 16 px dla atlasów intensywnie używających mipmap; dla 2K odpowiada to 4/8 px, jeśli układ jest skalowany proporcjonalnie.
 
-- brak non-manifold edges, poza jawnie udokumentowanymi otworami technicznymi;
-- brak zerowych powierzchni trójkątów i zduplikowanych wierzchołków na szwach, które miały być spawane;
-- brak odwróconych normalnych;
-- brak niezamierzonych self-intersections w pozie bazowej;
-- skala zgodna z pomiarem wysokości do ±0.5%;
-- symetria nie jest wymagana i nie może nadpisywać rzeczywistej asymetrii osoby.
+## Klasyfikacja
 
-## Topologia deformacyjna
+- `error` — wynik blokuje przekazanie do następnego etapu lub zmienia wygląd, deformację, wypalanie albo import; po naprawie wymaga ponownej kontroli.
+- `warning` — nie blokuje bieżącego zastosowania, ale ma mierzalne ryzyko; raport musi wskazać właściciela i plan kontroli.
+- `accepted_exception` — znane odstępstwo ma zapisany zakres, przyczynę, wpływ, osobę zatwierdzającą i termin ważności. To nie jest wynik pozytywny i nie może zastąpić naprawy bez decyzji odbiorczej.
 
-Co najmniej 3 ciągłe pętle deformacyjne wokół ust i oczu muszą zachować stabilność podczas podstawowych ekspresji, ale liczba pętli nie jest celem sama w sobie. Test praktyczny ma pierwszeństwo.
+## Kontrola siatki wysokiej rozdzielczości
 
-## Gęstość
+Wejściem jest wyczyszczona, edytowalna scena high-poly oraz niezmienione źródło skanu do porównania. Nie wymagaj topologii deformacyjnej ani UV, jeżeli nie są jeszcze częścią tego etapu.
 
-Nie ustalamy globalnego limitu polygonów dla mastera. Raport zawiera vertices, faces, triangles, bounding box, liczbę UV sets, materiałów i shape keys. Runtime LOD posiada osobny budżet.
+| Kontrola i narzędzie/widok | Czynności | Oczekiwany wynik | Błąd i naprawa |
+| --- | --- | --- | --- |
+| kompletność; widok bryłowy i przekroje z przodu/boku/góry | Ukryj kolejno obiekty, obejrzyj oczodoły, uszy, pachy, przestrzenie między palcami i stopy; porównaj ze źródłem. | Brak niezamierzonych dziur, pływających fragmentów i utraconych cech anatomicznych. | Dziura lub oderwany fragment istotny dla sylwetki: `error`; zrekonstruuj ze źródła, połącz powłokę i ponownie porównaj. Nieistotny szum poza obiektem: `warning`; usuń lub udokumentuj. |
+| geometria non-manifold; selektor `Non-Manifold` i statystyki siatki | Zastosuj tylko modyfikatory wymagane przez etap, zaznacz otwarte brzegi, krawędzie z ponad dwiema ścianami i luźną geometrię; obejrzyj każdy wynik. | Zamknięta powłoka albo wyłącznie nazwane otwory techniczne. | Niezamierzony wynik: `error`; usuń ściany wewnętrzne, zespawaj właściwe wierzchołki lub załataj z kontrolą powierzchni. Otwór techniczny: `accepted_exception` z lokalizacją. |
+| powierzchnie zerowe i duplikaty; analiza `Mesh Statistics`/`Degenerate` | Uruchom wyszukiwanie geometrii zdegenerowanej z tolerancją odpowiednią do jednostek; sprawdź też zduplikowane wierzchołki bez automatycznego scalania całej siatki. | Zero ścian o zerowym polu i zero przypadkowych duplikatów. | Każdy przypadek: `error`; rozpuść ścianę, przesuń/usuń wierzchołek lub lokalnie zespawaj, zachowując detal. |
+| normalne; `Face Orientation` i cieniowanie jednostronne | Włącz orientację ścian, obejrzyj zewnętrzną i wewnętrzną stronę wszystkich powłok oraz testowo włącz usuwanie tylnych ścian. | Spójne normalne skierowane na zewnątrz; osobne powłoki mają świadomie określony kierunek. | Odwrócony fragment: `error`; przelicz na zewnątrz, a niejednoznaczne obszary odwróć ręcznie. |
+| samoprzecięcia; analizator `Self Intersections`, widok szkieletowy i przekroje | Uruchom analizę dla każdej ciągłej powłoki, sprawdź wskazane pary w powiększeniu i odróżnij kontakt od przecięcia. | Brak niezamierzonych przecięć; kontakt anatomiczny jest rozdzielony lub opisany. | Przecięcie wpływające na retopologię/bake: `error`; rozsuń lub przebuduj lokalną powierzchnię bez wygładzania cech. Niepewny wynik analizatora: `warning`; potwierdź drugim widokiem. |
+| zgodność kształtu; nakładka półprzezroczysta i mapa odległości do skanu | Wyrównaj transformacje, wykonaj mapę odległości i obejrzyj sylwetkę oraz cechy twarzy przy stałej kamerze. | Odchylenia mieszczą się w uzgodnionej tolerancji i nie usuwają asymetrii osoby. | Systematyczne skurczenie lub utrata cechy: `error`; wróć do kroku czyszczenia i projekcji na źródło. Lokalny szum poniżej tolerancji: `warning`. |
+| skala; jednostki sceny, obwiednia i narzędzie pomiarowe | Ustaw jednostki, zastosuj właściwy profil osi, zmierz znany odcinek i porównaj z manifestem. | Jednostki są jawne, transformacja skali wynosi `1,1,1`, a wymiar mieści się w zatwierdzonej niepewności pomiaru. | Niezgodność: `error`; popraw skalę na poziomie obiektu/sceny, zastosuj transformację i powtórz kontrolę odległości. |
 
-## UV
+## Kontrola wzorcowej retopologii
 
-Sprawdzamy overlapping UV tylko w miejscach jawnie zaprojektowanych. Padding po bake powinien odpowiadać minimum 8 px w docelowej teksturze 4K, preferowane 16 px dla atlasów pod mipmapping.
+Wejściem jest zatwierdzona siatka high-poly i edytowalna wersja wzorcowa (master asset). Retopologia ma zachować podobieństwo i deformować się stabilnie; sama przewaga czworokątów nie jest kryterium odbioru.
 
-## Raport
+| Kontrola i narzędzie/widok | Czynności | Oczekiwany wynik | Błąd i naprawa |
+| --- | --- | --- | --- |
+| zgodność powierzchni; `Shrinkwrap` wyłączony do kontroli, mapa odległości i sylwetka | Porównaj neutralną siatkę z high-poly w tych samych transformacjach; sprawdź twarz, uszy, dłonie i asymetrię. | Sylwetka i punkty charakterystyczne mieszczą się w progu projektu bez sztucznej symetryzacji. | Odchylenie ponad próg: `error`; przesuń wierzchołki lub popraw projekcję, nie zwiększając gęstości bez potrzeby. |
+| manifold, degeneraty, normalne i samoprzecięcia; narzędzia jak dla high-poly | Uruchom wszystkie cztery analizy na siatce bazowej i każdej osobnej powłoce. | Brak błędów poza udokumentowanymi otworami technicznymi. | Niezamierzony wynik: `error`; napraw lokalnie i ponów analizę oraz test deformacji. |
+| przepływ krawędzi; widok krawędzi i animowane pozy ekstremalne | Śledź ciągłość pętli wokół ust, oczu i stawów; zegnij łokcie/kolana oraz uruchom mrugnięcie, otwarcie ust i uśmiech. | Co najmniej trzy użyteczne pętle wokół ust i oczu zachowują objętość; bieguny nie tworzą ostrych załamań. Test praktyczny ma pierwszeństwo przed liczbą pętli. | Załamanie, utrata objętości lub przyszczypnięcie powierzchni: `error`; przekieruj pętle, przesuń biegun albo dodaj lokalną pętlę i popraw wagi/kształt korekcyjny. Nadmierna gęstość bez artefaktu: `warning`; uprość przed zamrożeniem indeksów. |
+| gęstość i triangulacja; statystyki oraz podgląd trójkątów | Zapisz liczby elementów, pokaż triangulację bez stosowania jej do mastera i sprawdź długie, cienkie trójkąty w obszarach deformacji. | Gęstość rośnie tam, gdzie wymaga jej sylwetka/deformacja; triangulacja jest stabilna. | Nieprzewidywalny diagonal lub skrajnie cienka ściana w stawie: `error`; obróć krawędź lub przebuduj lokalny układ. Nie ustala się globalnego limitu polygonów dla mastera. |
+| UV overlap; edytor UV i funkcja `Select Overlap` | Sprawdź każdy zestaw i kafel UDIM osobno; porównaj zaznaczenia z listą celowo współdzielonych wysp. | Brak przypadkowego nakładania; każde zamierzone nałożenie ma identyczną orientację/skalę, jeśli wymaga tego bake. | Przypadkowe nałożenie: `error`; rozdziel i przepakuj wyspy. Zamierzone bez wpisu w manifeście: `warning`; uzupełnij manifest przed akceptacją. |
+| margines i zniekształcenie UV; tekstura kontrolna UV, pomiar pikseli i podgląd mipmap | Nałóż kratkę, sprawdź rozciąganie, następnie zmierz najmniejszy odstęp wysp w docelowej rozdzielczości i obejrzyj niższe mipmapy. | Brak istotnego rozciągania; co najmniej 8 px w 4K po wypaleniu, preferowane 16 px dla atlasu z łańcuchem mipmap. | Poniżej minimum lub widoczne przeciekanie: `error`; przepakuj wyspy/zwiększ margines i wypal ponownie. Nierówna gęstość tekseli bez wpływu wizualnego: `warning`; uzasadnij priorytety. |
+| skala i transformacje; panel transformacji i miarka | Porównaj znany wymiar z manifestem, sprawdź osie oraz transformacje wszystkich obiektów zależnych. | Różnica skali nie przekracza ±0,5%, skala obiektu wynosi `1,1,1`, a asymetria jest zachowana. | Przekroczenie: `error`; popraw wspólny root/scenę, zastosuj transformacje i zweryfikuj rig oraz kształty zależne. |
 
-Każdy błąd otrzymuje `error`, `warning` albo `accepted_exception` z opisem przyczyny.
+## Kontrola eksportu do środowiska czasu rzeczywistego
+
+Wejściem jest zatwierdzony master, jawny profil eksportu oraz świeży eksport FBX, GLB lub USD. Importuj do pustego projektu w tej samej wersji środowiska docelowego; nie oceniaj pliku ponownie otwartego wyłącznie w źródłowym DCC.
+
+| Kontrola i narzędzie/widok | Czynności | Oczekiwany wynik | Błąd i naprawa |
+| --- | --- | --- | --- |
+| integralność i statystyki; log eksportera/importera oraz porównanie manifestów | Eksportuj z logiem, zaimportuj do pustej sceny i porównaj nazwy, liczby trójkątów, materiałów, UV, kości i celów morfowania. | Brak brakujących/nieoczekiwanych obiektów, a różnice wynikają wyłącznie z profilu, np. jawnej triangulacji. | Brak elementu lub cicha zmiana: `error`; popraw selekcję/profil/zgodność wersji i wygeneruj eksport od nowa, nie edytuj pliku pochodnego. |
+| skala, osie i pozycja; siatka jednostek, obwiednia, gizmo osi i obiekt referencyjny 1 m | Zmierz wysokość po imporcie, sprawdź kierunki forward/up, punkt początkowy i transformacje root. | Eksport ma rzeczywisty wymiar w jednostkach celu (dla Unreal centymetry), właściwą orientację i brak ukrytego mnożnika skali. | Błąd skali/osi: `error`; popraw profil konwersji w źródle, wyeksportuj i zaimportuj ponownie. Nie skaluj ręcznie instancji jako naprawy. |
+| normalne i styczne; tryb `Face Orientation`, materiał testowy normal map i odbicie lustrzane | Obejrzyj strony ścian, szwy i highlight pod obracanym światłem; porównaj konwencję przestrzeni stycznych z profilem. | Brak znikających ścian, ciemnych klinów i szwów nieobecnych w masterze. | Odwrócone normalne albo niezgodna przestrzeń stycznych: `error`; popraw winding/tangenty lub ustawienia importu i przebake'uj mapę normalnych. |
+| triangulacja i deformacja; podgląd wireframe oraz klipy odbiorcze | Porównaj diagonale z zatwierdzonym eksportem, uruchom ekstremalne pozy i cele morfowania. | Triangulacja jest deterministyczna, a deformacja odpowiada masterowi bez nowych załamań. | Zmieniony diagonal powodujący artefakt lub inna kolejność wierzchołków: `error`; trianguluj kontrolowanie przed eksportem albo ustabilizuj ustawienia eksportera, następnie przebuduj zależne dane. |
+| nakładanie UV i margines; inspektor UV środowiska, tekstura kontrolna oraz wymuszone niskie mipmapy | Sprawdź kanał materiałowy i kanał mapy oświetlenia oddzielnie, uruchom diagnostykę nakładania i oddal kamerę, aby wymusić niższe mipmapy. | Nakładanie występuje tylko zgodnie z profilem; UV mapy oświetlenia jest unikalne, jeśli wymagane; brak przeciekania na szwach. | Nieplanowane nakładanie lub przeciekanie: `error`; popraw właściwy zestaw UV i margines w wersji wzorcowej, po czym ponów wypalanie oraz eksport. Ostrzeżenie importera przy celowym nakładaniu: `accepted_exception` tylko z dowodem, że dany kanał je dopuszcza. |
+| budżet poziomów szczegółowości (Level of Detail, LOD); statystyki renderera i przełączanie wymuszone | Wymuś kolejno każdy LOD, zapisz trójkąty/materiały/kości, sprawdź sylwetkę i przejścia z kamer zatwierdzonych w profilu. | Każdy LOD mieści się w budżecie, zachowuje kluczową sylwetkę i nie „wyskakuje” ponad dopuszczalny próg. | Przekroczony budżet lub widoczny pop: `error`; zmień redukcję/próg przełączania w źródle i ponów eksport. Drobna utrata detalu w dalekim LOD: `warning` według profilu. |
+| kolizja i obwiednia; podgląd brył kolizyjnych oraz profiler | Włącz wizualizację kolizji, porównaj z renderowaną siatką, uruchom pozycję neutralną i ruch testowy. | Bryły kolizyjne obejmują wymagane obszary bez znacznego nadmiaru, obwiednia nie ucina animacji, a koszt mieści się w budżecie. | Ucinanie, błędna bryła kolizyjna lub koszt ponad budżet: `error`; popraw artefakt kolizji lub obwiednię w źródle i wyeksportuj ponownie. |
+
+## Raport i zakończenie
+
+Dla każdej kontroli zapisz narzędzie i wersję, ustawienia/tolerancję, liczbę znalezionych elementów, klasyfikację, zrzut z zaznaczeniem oraz identyfikator poprawionej wersji. Wynik etapu jest pozytywny tylko wtedy, gdy nie pozostał żaden `error`, a każdy `warning` i `accepted_exception` ma właściciela. Po naprawie ponów kontrolę, która wykryła problem, oraz kontrole zależne; zmiana geometrii wymaga ponownego sprawdzenia normalnych, UV, deformacji i eksportu. Decyzję sesji oraz strukturę dowodów zapisuj według [kryteriów odbiorczych](acceptance-criteria.md).
