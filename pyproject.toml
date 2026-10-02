@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     "pytest>=8,<10",
     "ruff>=0.12,<1",
+    "pillow>=10,<13",
 ]
 docs = [
     "mkdocs>=1.6,<2",
