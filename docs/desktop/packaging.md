@@ -8,11 +8,11 @@ Dla Windows docelowym artefaktem jest `AvatarStudio.exe` lub katalog dystrybucyj
 
 Blender, COLMAP, FFmpeg i Piper pozostają narzędziami zewnętrznymi. Avatar Studio wykrywa je przez adaptery i nie powinien bez potrzeby kopiować ich binariów do własnego pakietu.
 
-## Automatyczne artefakty GitHub Actions
+## Artefakty CI i trwałe wydania
 
-Workflow **Desktop package** uruchamia testy GUI i buduje natywne artefakty Windows oraz Linux dla pull requestów zmieniających aplikację, po scaleniu takich zmian do `main`, na żądanie oraz dla tagów `studio-v*`. W widoku uruchomienia, w sekcji **Artifacts**, dostępne są pakiety `AvatarStudio-Windows` i `AvatarStudio-Linux`.
+Workflow **Desktop package** uruchamia testy GUI i buduje natywne pakiety Windows oraz Linux. Ręczne uruchomienia udostępniają krótkotrwałe artefakty CI do diagnostyki. Dla tagów `studio-v*` workflow publikuje natomiast trwały **GitHub Release** z plikami `AvatarStudio-Windows.exe`, `AvatarStudio-Linux` oraz `SHA256SUMS.txt`, a przejściowe artefakty Actions usuwa po poprawnym utworzeniu wydania.
 
-Artefakt CI jest wynikiem pochodnym. Kod w `apps/avatar_studio` pozostaje kanonicznym, edytowalnym źródłem.
+Release jest trwałym punktem odniesienia dla wersji aplikacji; artefakt CI służy wyłącznie do krótkotrwałej walidacji. Kod w `apps/avatar_studio` pozostaje kanonicznym, edytowalnym źródłem.
 
 ## PyInstaller
 
