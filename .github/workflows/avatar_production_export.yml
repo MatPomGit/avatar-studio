@@ -59,7 +59,7 @@ jobs:
             animations/manifest.json
             animations/ANIMATION_IMPORT_GUIDE.md
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   photogrammetry_scan:
     runs-on: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
           name: scan-results
           path: source/scans/colmap_output/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   ue_export:
     if: ${{ inputs.run_ue_export }}
@@ -118,7 +118,7 @@ jobs:
             exports/avatar_final.fbx
             reports/fbx_validation.html
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
   finalize_validation:
     if: ${{ !inputs.run_ue_export }}
