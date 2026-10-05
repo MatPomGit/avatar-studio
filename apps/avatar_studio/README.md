@@ -11,7 +11,7 @@ python -m pip install -e ".[desktop]"
 avatar-studio --workspace D:\Avatar3D\projects\self-avatar
 ```
 
-A standalone `.exe` is built automatically by the `Desktop package` GitHub Actions workflow after relevant changes reach `main`, for pull requests and for tags matching `studio-v*`. The resulting `AvatarStudio-Windows` artefact can be downloaded from the workflow run.
+A standalone `.exe` is built by the `Desktop package` GitHub Actions workflow. Ad-hoc manual builds are available only as short-lived workflow artifacts. Tags matching `studio-v*` publish durable GitHub Releases containing the Windows and Linux executables plus a SHA-256 manifest; the temporary Actions artifacts are removed after a successful release.
 
 To build the same executable locally, open PowerShell in the repository root:
 
