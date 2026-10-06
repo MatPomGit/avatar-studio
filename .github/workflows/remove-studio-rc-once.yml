@@ -1,0 +1,32 @@
+name: Remove redundant Avatar Studio RC tag once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/remove-studio-rc-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove redundant RC tag if no release uses it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="studio-v0.3.0-rc1"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::A release already exists for $tag; refusing automatic deletion."
+            exit 2
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/$tag" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/$tag"
+            echo "Deleted redundant tag $tag"
+          else
+            echo "Tag $tag is already absent."
+          fi
