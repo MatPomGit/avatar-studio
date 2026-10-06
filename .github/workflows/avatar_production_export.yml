@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: avatar-production-export
@@ -135,17 +136,35 @@ jobs:
     if: ${{ inputs.run_ue_export }}
     runs-on: ubuntu-latest
     needs: [validate_and_prepare, photogrammetry_scan, ue_export]
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+
+      - name: Download validated production export
+        uses: actions/download-artifact@v4
+        with:
+          name: avatar-fbx-export
+          path: release-assets
+
       - name: Generate export report
         run: |
           {
             echo "## Avatar Export Summary"
             echo "**Run:** ${{ github.run_number }}"
+            echo "**Commit:** ${{ github.sha }}"
             echo "**Quality preset:** ${{ inputs.quality_preset }}"
             echo "**Status:** completed"
+            echo
+            echo "This release preserves the validated production FBX and validation report."
+            echo "Photogrammetry intermediates remain transient CI data and are not treated as the canonical production state."
           } > EXPORT_REPORT.md
+
+      - name: Generate SHA-256 manifest
+        shell: bash
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
@@ -153,3 +172,24 @@ jobs:
           name: Avatar Export #${{ github.run_number }}
           body_path: EXPORT_REPORT.md
           draft: false
+          files: |
+            release-assets/*
+            EXPORT_REPORT.md
+
+      - name: Delete transient Actions artifacts after release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.workflow_run.id == ${{ github.run_id }}) | .id' \
+          | while read -r artifact_id; do
+              [ -z "$artifact_id" ] && continue
+              gh api --method DELETE \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "repos/${GITHUB_REPOSITORY}/actions/artifacts/$artifact_id"
+            done
