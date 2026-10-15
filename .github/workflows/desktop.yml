@@ -2,10 +2,6 @@ name: Desktop package
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "studio-v*"
-
 permissions:
   contents: write
 
@@ -15,6 +11,7 @@ concurrency:
 
 jobs:
   package:
+    if: ${{ github.ref == 'refs/heads/main' }}
     strategy:
       matrix:
         include:
@@ -60,7 +57,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/studio-v')
+    if: ${{ (startsWith(github.ref, 'refs/tags/studio-v')) && github.ref == 'refs/heads/main' }}
     needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 10

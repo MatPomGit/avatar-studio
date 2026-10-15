@@ -1,26 +1,13 @@
 name: Documentation
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "docs/**"
-      - "scripts/check_mkdocs_coverage.py"
-      - "scripts/lint_docs_terminology.py"
-      - "mkdocs.yml"
-      - "pyproject.toml"
-      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
   push:
     branches: [main]
     paths:
-      - "docs/**"
-      - "scripts/check_mkdocs_coverage.py"
-      - "scripts/lint_docs_terminology.py"
-      - "mkdocs.yml"
-      - "pyproject.toml"
-      - ".github/workflows/pages.yml"
-  workflow_dispatch:
-
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
 permissions:
   contents: read
   pages: write
@@ -32,6 +19,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -67,7 +55,7 @@ jobs:
           path: site
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: ${{ (github.event_name != 'pull_request') && github.ref == 'refs/heads/main' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

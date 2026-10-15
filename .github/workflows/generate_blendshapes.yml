@@ -5,6 +5,7 @@ on:
 
 jobs:
   placeholder:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Workflow intentionally manual

@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   placeholder:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

@@ -1,22 +1,6 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "apps/avatar_studio/src/**"
-      - "scripts/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - ".github/workflows/**"
-  push:
-    branches: [main]
-    paths:
-      - "apps/avatar_studio/src/**"
-      - "scripts/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -28,6 +12,7 @@ concurrency:
 
 jobs:
   python-checks:
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

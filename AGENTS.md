@@ -28,3 +28,12 @@ Priorytety jakości: podobieństwo do materiałów referencyjnych, anatomia i de
 - Nie wypychaj zmian bezpośrednio do `main`.
 - Zmiana granicy architektonicznej, formatu kanonicznego, zasad prywatności lub środowiska wykonawczego wymaga ADR.
 - Formatów, nazw kości i plików wymaganych przez narzędzia nie zmieniaj bez migracji wszystkich referencji.
+
+## GitHub Actions policy for AI agents
+
+- Manual-first: heavy GPU/3D/avatar generation, exports, simulations, packaging, validation and releases use `workflow_dispatch` only.
+- Automatic events are allowed only for explicitly approved low-cost publishing/deployment on `push` to `main`; never use `pull_request`, `pull_request_target`, `merge_group` or non-main branches.
+- All jobs must have an effective `github.ref == 'refs/heads/main'` condition, including manual jobs. Preserve existing manual inputs, approval flags, disabled job gates, secret handling, permissions and runners.
+- Agents should test locally on feature branches, never dispatch Actions from those branches, and verify actual workflow results before claiming success.
+- Backups and essential scheduled monitoring can remain automatic only after explicit review; do not silently disable them. Document all permitted automated exceptions.
+- Old branch versions can still permit non-main manual dispatch; run any manual workflow on `main` only. Removing PR checks may require adjustments to required branch checks.
